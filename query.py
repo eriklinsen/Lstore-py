@@ -39,7 +39,7 @@ class Query:
             print('error: number of queried columns must match number of columns in table')
             return []
         rids = self.idx.locate(key)
-        if rids is not None:
+        if len(rids) is not 0:
             records = self.table.get_records(rids, query_columns)      
             return records
         else:
@@ -60,4 +60,14 @@ class Query:
     """
 
     def sum(self, start_range, end_range, aggregate_column_index):
+        column_sum = 0
+        query_columns = [0]*self.table.num_columns
+        query_columns[aggregate_column_index] = 1
+        for key in range(start_range, end_range+1):
+            rids = self.idx.locate(key)
+            if len(rids) is not 0:
+                records = self.table.get_records(rids, query_columns)
+                for record in records:
+                    column_sum += record.columns[0]
+        return column_sum
         pass

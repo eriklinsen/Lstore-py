@@ -30,8 +30,6 @@ class Table:
         range have been assigned, the table requets a new rid_block.
         """
         self.rid_block = rid_space.assign_space()
-        print('table rid_block is',sep='')
-        print(self.rid_block)
         """
         global_rid_space is the table's reference to the global rid space
         allocater. The table will make requests to this global rid space
@@ -39,6 +37,7 @@ class Table:
         'depleted'
         """
         self.global_rid_space = rid_space
+        self.rid_block_offset = 0
         self.num_columns = num_columns
         """
         keep track of the number of records assoicated with this table. for
@@ -113,9 +112,12 @@ class Table:
     done whenever the current rid space is 'depleted':
     """
     def get_rid(self):
-        if self.num_records%512 is 0:
+        if self.rid_block_offset == 512:
             self.rid_block = self.global_rid_space.assign_space()
-        return self.rid_block[0] + self.num_records
+            self.rid_block_offset = 0
+        rid = self.rid_block[0] + self.rid_block_offset
+        self.rid_block_offset += 1
+        return rid
     """
     take the set of base pages, which are clearly located in the most recently
     created page range, and determine if they can hold any more records:
@@ -188,9 +190,6 @@ class Table:
             self.num_records += 1
             # return rid of newly inserted record
             return rid
-        """
-        otherwise, get 'current' set of base pages
-        """
         else:
             range_idx = 0
             for column in columns:
