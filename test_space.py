@@ -66,6 +66,12 @@ r1 = query1.idx.locate(15)
 full_r1 = table1.get_full_record(r1)
 show_records(full_r1)
 
+print('===perform single update of record===')
+query1.update(15,[None,2,None,None])
+query1.update(15,[None,None,13,None])
+full_r1 = table1.get_full_record(r1)
+show_records(full_r1)
+
 print('===perform 10k inserts on table2===')
 # bigger insert and select test:
 table2 = Table('T2', 5, 0, rid_alloc)
@@ -77,7 +83,8 @@ for i in range(0, 10000):
      #   print(rid_alloc.rid_block)
 insert_time_1 = process_time()
 print('Inserting 10k records took: \t\t\t', insert_time_1 - insert_time_0)
-
+#print('table2 info:')
+#print(table2.page_directory)
 print('===performing select on table2===')
 # should return record with rid = 1113, key = 906660271, columns = [key,
 # 93, 600, 600, 600]
@@ -91,4 +98,5 @@ print('===performing sum on table2===')
 print(query2.sum(906659671, 906659671+10, 2))
 # sums up 0 + 1 + 2 + ..... 2500. Should be 3126250
 print(query2.sum(906659671, 906659671+2500, 2))
+
 

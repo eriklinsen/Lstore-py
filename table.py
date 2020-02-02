@@ -81,10 +81,12 @@ class Table:
         contain the record data. It also contains the record offset.
         For example, suppose we have a table of 4 columns and there's a record
         within this table that has an rid of 1. Also suppose that this record
-        spans base pages with id's 1,2,3,4. Moreover, suppose that each of
+        spans base pages with id's 0,1,2,3. Moreover, suppose that each of
         the column values for the record are located in the first 8 bytes of
         each of the physical base pages. Then the entry for this rid would look
-        like: 1 -> (1,4,0)
+        like: 1 -> (0,7,0,0) since base pages would have ids 0-3, metadata
+        pages would have ids 4-7 and these pages would be located in page range
+        0
         """
         self.page_directory = {}
         """
@@ -118,6 +120,7 @@ class Table:
         rid = self.rid_block[0] + self.rid_block_offset
         self.rid_block_offset += 1
         return rid
+
     """
     take the set of base pages, which are clearly located in the most recently
     created page range, and determine if they can hold any more records:
@@ -132,6 +135,8 @@ class Table:
                 return False
             else:
                 return True
+
+    # def tail_page_is_full(self):
     """
     Used by select function in Query class.
     get all records corresponding to the record ids in rids and pull out the
@@ -141,7 +146,10 @@ class Table:
     To obtain a page we do:
     rid -> (page_directory) -> page_id and offset -> (page_index) -> page
     Will return a list of record objects containing key and requested column
-    data. 
+    data.
+
+    :param rids: list   # rids for all records to be retrieved
+    :param query_columns: list  # list specifying values to be retrieved
     """
     def get_records(self, rids, query_columns):
         records = []
@@ -157,8 +165,11 @@ class Table:
             record = Record(rid, self.key, columns)
             records.append(record)
         return records
+
     """
-    get complete record with metadata included:
+    get complete record with metadata included.
+
+    :param rids: list   # rids of all records to be retrieved
     """
     def get_full_record(self, rids):
         records = []
@@ -170,6 +181,10 @@ class Table:
                 page = self.pages[self.page_index[page_id]]
                 column_val = page.read(rid_tuple[2])
                 columns.append(column_val)
+            """
+            starting from the back, get schema and work back until we get the
+            indirection column
+            """
             for i in range(4):
                 page_id = rid_tuple[1] - i
                 page = self.pages[self.page_index[page_id]] 
@@ -187,8 +202,10 @@ class Table:
     Used by insert function in Query class:
     As records are inserted we create and insert the appropriate entries for
     the page_directory and page_index structures.
+    
+    :param *columns: tuple  # all column values for record to be inserted
     """
-    def insert_record(self, *columns):
+    def insert_base_record(self, *columns):
         schema_encoding = '0' * self.num_columns
         curr_time = int(time())
         """
@@ -235,7 +252,7 @@ class Table:
             page_range.append(schema_col.get_id())
 
             self.page_directory[rid] = (page_range[0], page_range[-1],
-                    self.record_offset)
+                    self.record_offset, len(self.page_ranges))
             self.page_ranges.append(page_range)
             self.record_offset += 1
             self.num_records += 1
@@ -273,11 +290,87 @@ class Table:
             page.write_schema(schema_encoding)
             # create a new entry in the page directory
             self.page_directory[rid] = (self.page_ranges[-1][0],
-                    self.page_ranges[-1][-1], self.record_offset)
+                    self.page_ranges[-1][-1], self.record_offset,
+                    len(self.page_ranges)-1)
             self.num_records += 1
             self.record_offset += 1
             # return rid of newly created record
             return rid
+
+    """
+    :param page_range: list     # page range to be updated with tail page
+                                      id's
+    """
+    def allocate_tail_pages(self, page_range):
+        for i in range(self.num_columns + 4):
+            page = Page(len(self.pages))
+            self.page_index[page.get_id()] = len(self.pages)
+            self.pages.append(page)
+            page_range.append(page.get_id())
+
+    """
+    :param tail_page_range: list    # range of page id's for tail pages
+    :param column_update: list  # update values
+    :param indir_rid    # rid of most recent tail record
+    :param rid_tuple     # tuple for record that's going to be updated
+    """
+    def insert_tail_record(self, tail_page_range, column_update, indir_rid, rid_tuple):
+        schema_encoding = ['0']*self.num_columns
+        metadata = [indir_rid]
+        tail_record_offset = 0
+        # write tail record data
+        for i in range(self.num_columns):
+            page_id = tail_page_range[i]
+            page = self.pages[self.page_index[page_id]]
+            update_value = column_update[i]
+            tail_record_offset = 512 - page.get_capacity()
+            if update_value is not None:
+                schema_encoding[i] = '1'
+                page.write(update_value)
+            else:
+                page.write(0)
+        tail_rid = self.get_rid()
+        metadata.append(tail_rid)
+        metadata.append(int(time()))
+        metadata.append(schema_encoding)
+        # write tail record metadata
+        for k in range(4):
+            page_id = tail_page_range[self.num_columns:][k]
+            page = self.pages[self.page_index[page_id]]
+            if k != 3:
+                page.write(metadata[k])
+            else:
+                schema_encoding_str = ''.join(schema_encoding)
+                page.write_schema(schema_encoding_str)
+        # update indirection column of base record
+        # get page containing indirection pointers
+        indir_page_id = rid_tuple[0]+self.num_columns
+        page = self.pages[self.page_index[indir_page_id]]
+        offset = rid_tuple[2]
+        page.update(tail_rid,offset)
+        self.page_directory[tail_rid] = (tail_page_range[0],tail_page_range[-1],tail_record_offset, rid_tuple[3])
+        tail_records = self.get_full_record([tail_rid])
+        print(tail_records[0].columns)
+
+
+    def update_record(self, rid, column_update):
+        rid_tuple = self.page_directory[rid]
+        page_range_idx = rid_tuple[3]
+        page_range = self.page_ranges[page_range_idx]
+        
+        """
+        if no tail pages have been allocated for this page range, the
+        allocate some. Clearly, if page range containing the record to be
+        updated is only large enough to accomodate the base pages and meta
+        data pages, then no tail pages have been allocated
+        """
+        if len(page_range) == self.num_columns + 4:
+            self.allocate_tail_pages(page_range)
+        # TODO: if tail pages full allocate new set of tail pages
+        indir_col = self.pages[self.page_index[rid_tuple[0]+self.num_columns]]
+        indir_rid = indir_col.read(rid_tuple[2])
+        tail_page_range = page_range[-(self.num_columns + 4):]
+        self.insert_tail_record(tail_page_range, column_update, indir_rid,rid_tuple)
 
     def __merge(self):
         pass

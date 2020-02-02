@@ -25,7 +25,7 @@ class Query:
     """
 
     def insert(self, *columns):
-        rid = self.table.insert_record(*columns)
+        rid = self.table.insert_base_record(*columns)
         self.idx.update_index(rid,self.table.key)
         pass
 
@@ -51,6 +51,11 @@ class Query:
     """
 
     def update(self, key, *columns):
+        rids = self.idx.locate(key)
+        if len(rids) is not 0:
+            for column_update in columns:
+                for rid in rids:
+                    self.table.update_record(rid, column_update)
         pass
 
     """
