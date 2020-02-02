@@ -1,10 +1,10 @@
 from page import Page
 from time import time
 
-INDIRECTION_COLUMN = 0
-RID_COLUMN = 1
-TIMESTAMP_COLUMN = 2
-SCHEMA_ENCODING_COLUMN = 3
+INDIRECTION_COLUMN = 3
+RID_COLUMN = 2
+TIMESTAMP_COLUMN = 1
+SCHEMA_ENCODING_COLUMN = 0
 
 
 class Record:
@@ -158,12 +158,39 @@ class Table:
             records.append(record)
         return records
     """
+    get complete record with metadata included:
+    """
+    def get_full_record(self, rids):
+        records = []
+        for rid in rids:
+            rid_tuple = self.page_directory[rid]
+            columns = []
+            for i in range(self.num_columns):
+                page_id = rid_tuple[0] + i
+                page = self.pages[self.page_index[page_id]]
+                column_val = page.read(rid_tuple[2])
+                columns.append(column_val)
+            for i in range(4):
+                page_id = rid_tuple[1] - i
+                page = self.pages[self.page_index[page_id]] 
+                if i != SCHEMA_ENCODING_COLUMN:
+                    column_val = page.read(rid_tuple[2])
+                else:
+                    column_val = page.read_schema(rid_tuple[2],
+                            self.num_columns)
+                columns.append(column_val)
+            record = Record(rid, self.key, columns)
+            records.append(record)
+        return records
+
+    """
     Used by insert function in Query class:
     As records are inserted we create and insert the appropriate entries for
     the page_directory and page_index structures.
     """
     def insert_record(self, *columns):
-        # schema_encoding = '0' * self.num_columns
+        schema_encoding = '0' * self.num_columns
+        curr_time = int(time())
         """
         if 'current' base pages is full, or if no records have been inserted,
         then create new page range containing a fresh set of base pages and
@@ -182,7 +209,31 @@ class Table:
                 page_range.append(page.get_id())
             # obtain new rid from currently assigned rid space
             rid = self.get_rid()
-            # create a new entry in the page directory 
+            # create indirection column
+            indir_col = Page(len(self.pages))
+            indir_col.write(0) # if val in indir_col is 0, no tail pages exist
+            self.page_index[indir_col.get_id()] = len(self.pages)
+            self.pages.append(indir_col)
+            page_range.append(indir_col.get_id())
+            # create rid column page
+            rid_col = Page(len(self.pages))
+            rid_col.write(rid)
+            self.page_index[rid_col.get_id()] = len(self.pages)
+            self.pages.append(rid_col)
+            page_range.append(rid_col.get_id())
+            # create time stamp column page
+            time_col = Page(len(self.pages))
+            time_col.write(curr_time)
+            self.page_index[time_col.get_id()] = len(self.pages)
+            self.pages.append(time_col)
+            page_range.append(time_col.get_id())
+            # create schema encoding column page
+            schema_col = Page(len(self.pages))
+            schema_col.write_schema(schema_encoding) 
+            self.page_index[schema_col.get_id()] = len(self.pages)
+            self.pages.append(schema_col)
+            page_range.append(schema_col.get_id())
+
             self.page_directory[rid] = (page_range[0], page_range[-1],
                     self.record_offset)
             self.page_ranges.append(page_range)
@@ -202,9 +253,27 @@ class Table:
                 range_idx += 1
             # obtain a new rid from currently assigned rid space
             rid = self.get_rid()
+            # insert metadata columns:
+            range_span = len(self.page_ranges[-1]) - 1
+            # insert to indirection column
+            page_id = self.page_ranges[-1][range_span - INDIRECTION_COLUMN]
+            page = self.pages[self.page_index[page_id]]
+            page.write(0)
+            # insert to rid column
+            page_id = self.page_ranges[-1][range_span - RID_COLUMN]
+            page = self.pages[self.page_index[page_id]]
+            page.write(rid)
+            # insert to timestamp column
+            page_id = self.page_ranges[-1][range_span - TIMESTAMP_COLUMN]
+            page = self.pages[self.page_index[page_id]]
+            page.write(curr_time)
+            # insert to schema encoding column
+            page_id = self.page_ranges[-1][range_span - SCHEMA_ENCODING_COLUMN]
+            page = self.pages[self.page_index[page_id]]
+            page.write_schema(schema_encoding)
             # create a new entry in the page directory
             self.page_directory[rid] = (self.page_ranges[-1][0],
-                    self.page_ranges[-1][range_idx-1], self.record_offset)
+                    self.page_ranges[-1][-1], self.record_offset)
             self.num_records += 1
             self.record_offset += 1
             # return rid of newly created record
