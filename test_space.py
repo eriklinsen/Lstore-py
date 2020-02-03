@@ -74,13 +74,15 @@ show_records(full_r1)
 
 
 print('===perform single update of record===')
-query1.update(15,[None,2,None,None])
+update = [None,2,None,None]
+query1.update(15,*update)
 print('record after first update:')
 r1 = query1.select(15,[1,1,1,1])
 show_records(r1)
 
 
-query1.update(15,[None,None,13,None])
+update = [None, None, 13, None]
+query1.update(15,*update)
 print('record after second update:')
 r1 = query1.select(15,[1,1,1,1])
 show_records(r1)
@@ -88,7 +90,7 @@ show_records(r1)
 print('===perform 10k updates on table1===')
 update_time_0 = process_time()
 for i in range(1,10001):
-    query1.update(15,[None,i,None,None])
+    query1.update(15, None,i,None,None)
 update_time_1 = process_time()
 print('Updating a record 10k times took: \t\t\t', update_time_1 - update_time_0)
 r1 = query1.select(15,[1,1,1,1])

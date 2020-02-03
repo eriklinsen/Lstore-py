@@ -53,9 +53,8 @@ class Query:
     def update(self, key, *columns):
         rids = self.idx.locate(key)
         if len(rids) is not 0:
-            for column_update in columns:
-                for rid in rids:
-                    self.table.update_record(rid, column_update)
+            for rid in rids:
+                self.table.update_record(rid, columns)
         pass
 
     """
