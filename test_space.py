@@ -6,11 +6,16 @@ class RIDspace():
 
     def __init__(self):
         self.rid_block = (1,512)
+        self.tail_rid = pow(2,60)
     def assign_space(self):
         assigned_block = self.rid_block
         new_block = ((self.rid_block[0]+512),(self.rid_block[1]+512))
         self.rid_block = new_block
         return assigned_block
+    def assign_tail_rid(self):
+        assigned_rid = self.tail_rid
+        self.tail_rid = self.tail_rid - 1
+        return assigned_rid
 
 def dump_pages(table):
     for page in table.pages:
@@ -47,11 +52,12 @@ print('page ranges for table1:')
 print(table1.page_ranges)
 print('index over key for table1:')
 print(query1.idx.idx)
-
+print('length of pages list in table1')
+print(len(table1.pages))
 print('===simple select test===')
 print('should output a record with column values: [9,73456]')
-records_null = query1.select(5,[0,1,1,0])
-show_records(records_null)
+records = query1.select(5,[0,1,1,0])
+show_records(records)
 print('===simple sum test. should print 30, 31 and 988===')
 # should print 30:
 print(query1.sum(5,15,0))
@@ -66,11 +72,31 @@ r1 = query1.idx.locate(15)
 full_r1 = table1.get_full_record(r1)
 show_records(full_r1)
 
+
 print('===perform single update of record===')
 query1.update(15,[None,2,None,None])
+print('record after first update:')
+r1 = query1.select(15,[1,1,1,1])
+show_records(r1)
+
+
 query1.update(15,[None,None,13,None])
-full_r1 = table1.get_full_record(r1)
-show_records(full_r1)
+print('record after second update:')
+r1 = query1.select(15,[1,1,1,1])
+show_records(r1)
+
+print('===perform 10k updates on table1===')
+update_time_0 = process_time()
+for i in range(1,10001):
+    query1.update(15,[None,i,None,None])
+update_time_1 = process_time()
+print('Updating a record 10k times took: \t\t\t', update_time_1 - update_time_0)
+r1 = query1.select(15,[1,1,1,1])
+print('updated record:')
+show_records(r1)
+print('updated record with metadata:')
+records = table1.get_full_record([r1[0].rid])
+show_records(records)
 
 print('===perform 10k inserts on table2===')
 # bigger insert and select test:
@@ -83,8 +109,6 @@ for i in range(0, 10000):
      #   print(rid_alloc.rid_block)
 insert_time_1 = process_time()
 print('Inserting 10k records took: \t\t\t', insert_time_1 - insert_time_0)
-#print('table2 info:')
-#print(table2.page_directory)
 print('===performing select on table2===')
 # should return record with rid = 1113, key = 906660271, columns = [key,
 # 93, 600, 600, 600]
@@ -98,5 +122,4 @@ print('===performing sum on table2===')
 print(query2.sum(906659671, 906659671+10, 2))
 # sums up 0 + 1 + 2 + ..... 2500. Should be 3126250
 print(query2.sum(906659671, 906659671+2500, 2))
-
 

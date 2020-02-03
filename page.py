@@ -12,7 +12,7 @@ class Page:
         return self.pg_id
 
     def has_capacity(self):
-        return self.num_records*8 == 4096
+        return self.num_records*8 != 4096
         pass
 
     def get_capacity(self):
@@ -29,16 +29,21 @@ class Page:
         self.num_records += 1
         write_pos = self.num_records*8
         self.data[(write_pos-8):(write_pos)] = struct.pack('>Q', int(schema_encoding,2))
-
+    
+    # used to update pre-existing values
     def update(self, value, offset):
         self.data[(offset+1)*8 - 8:8*(offset+1)] = struct.pack('>Q', value)
 
-        
+    def update_schema(self, schema_encoding, offset):
+        self.data[(offset+1)*8 - 8:8*(offset+1)] = struct.pack('>Q',
+                int(schema_encoding,2))
+
+    # used to read data from page:
     def read(self, offset):
         return struct.unpack('>Q', self.data[(offset+1)*8 - 8:8*(offset+1)])[0]
 
     # must be used to read schema
-    def read_schema(self, offset, num_columns):
+    def read_schema(self, num_columns, offset):
         schema_encoding = self.data[(offset+1)*8 - 8:8*(offset+1)]
         schema_in_bits = ''.join(format(byte, '08b') for byte in schema_encoding)
         return schema_in_bits[64-num_columns:]

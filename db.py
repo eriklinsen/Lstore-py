@@ -4,12 +4,19 @@ class RIDspace():
 
     def __init__(self):
         self.rid_block = (1,512)
+        self.tail_rid = pow(2,60)
 
     def assign_space(self):
         assigned_block = self.rid_block
         new_block = ((self.rid_block[0]+512),(self.rid_block[1]+512))
         self.rid_block = new_block
         return assigned_block
+
+    def assign_tail_rid(self):
+        assigned_rid = self.tail_rid
+        self.tail_rid = self.tail_rid - 1
+        return assigned_rid
+
 
 class Database():
 

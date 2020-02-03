@@ -67,12 +67,13 @@ class Table:
 
         For example, we create a new table of four columns and insert 512
         records into this table. The data for these records will span the first
-        set of 4 base pages allocated for these records (say thay have ids
-        1,2,3, and 4). Then page_ranges would look like: [[1,2,3,4]].
+        set of 4 base pages and 4 metadata base pages allocated for these
+        records (say thay have ids 1,2,3, and 4). Then page_ranges would look
+        like: [[1,2,3,4,5,6,7,8]].
         Now suppose we immediately insert another 100 records. The 'current'
         page range is  full. So, we allocated a new set of base pages, write
         the data to these pages and page_ranges looks like this:
-        [[1,2,3,4][5,6,7,8]]
+        [[1,2,3,4,5,6,7,8][9,10,11,12,13,14,17,18]]
         """
         self.page_ranges = []
         """
@@ -131,12 +132,11 @@ class Table:
         else:
             page_id = self.page_ranges[-1][0]
             page = self.pages[self.page_index[page_id]]
-            if page.has_capacity() is False:
+            if page.has_capacity() is True:
                 return False
             else:
                 return True
 
-    # def tail_page_is_full(self):
     """
     Used by select function in Query class.
     get all records corresponding to the record ids in rids and pull out the
@@ -151,23 +151,67 @@ class Table:
     :param rids: list   # rids for all records to be retrieved
     :param query_columns: list  # list specifying values to be retrieved
     """
+
+    def get_most_recent_update(self, rid, indirection_pointer, query_columns):
+        rid_tuple = self.page_directory[rid]
+        schema_encoding_id = rid_tuple[1]
+        schema_encoding_col = self.pages[self.page_index[schema_encoding_id]]
+        base_schema = schema_encoding_col.read_schema(self.num_columns,
+                rid_tuple[2])
+        tail_encodings = '0'*self.num_columns
+        columns = [0]*self.num_columns
+        for idx in range(len(base_schema)):
+            if base_schema[idx] == '0':
+                page_id = rid_tuple[0] + idx
+                page = self.pages[self.page_index[page_id]]
+                columns[idx] = page.read(rid_tuple[2])
+        while indirection_pointer != 0:
+            tail_tuple = self.page_directory[indirection_pointer]
+            tail_schema_id = tail_tuple[1]
+            tail_schema_col = self.pages[self.page_index[tail_schema_id]]
+            tail_schema = tail_schema_col.read_schema(self.num_columns,
+                    tail_tuple[2])
+            updated_idx = tail_schema.find('1')
+            if tail_encodings[updated_idx] == '0':
+                page = self.pages[self.page_index[tail_tuple[0] + updated_idx]]
+                columns[updated_idx] = page.read(tail_tuple[2])
+                tail_encodings = list(tail_encodings)
+                tail_encodings[updated_idx] = '1'
+                tail_encodings = ''.join(tail_encodings)
+            if int(tail_encodings,2) & int(base_schema,2) == int(base_schema,2):
+                break
+            indir_id = tail_tuple[0] + self.num_columns
+            indir_col = self.pages[self.page_index[indir_id]]
+            indirection_pointer = indir_col.read(tail_tuple[2])
+        return columns
+
     def get_records(self, rids, query_columns):
         records = []
         for rid in rids:
             rid_tuple = self.page_directory[rid]
+            indir_id = rid_tuple[0] + self.num_columns
+            indir_col = self.pages[self.page_index[indir_id]]
+            indirection_pointer = indir_col.read(rid_tuple[2])
             columns = []
-            for idx in range(len(query_columns)):
-                if query_columns[idx] is 1:
-                    page_id = rid_tuple[0] + idx
-                    page = self.pages[self.page_index[page_id]]
-                    column_val = page.read(rid_tuple[2])
-                    columns.append(column_val)
+            if indirection_pointer == 0:
+                for idx in range(len(query_columns)):
+                    if query_columns[idx] is 1:
+                        page_id = rid_tuple[0] + idx
+                        page = self.pages[self.page_index[page_id]]
+                        column_val = page.read(rid_tuple[2])
+                        columns.append(column_val)
+            else:
+                updated_record_columns = self.get_most_recent_update(rid,
+                        indirection_pointer, query_columns)
+                for idx in range(len(query_columns)):
+                    if query_columns[idx] == 1:
+                        columns.append(updated_record_columns[idx])
             record = Record(rid, self.key, columns)
             records.append(record)
         return records
 
     """
-    get complete record with metadata included.
+    get complete record with metadata included.used for testing purposes
 
     :param rids: list   # rids of all records to be retrieved
     """
@@ -191,8 +235,8 @@ class Table:
                 if i != SCHEMA_ENCODING_COLUMN:
                     column_val = page.read(rid_tuple[2])
                 else:
-                    column_val = page.read_schema(rid_tuple[2],
-                            self.num_columns)
+                    column_val = page.read_schema(self.num_columns,
+                            rid_tuple[2])
                 columns.append(column_val)
             record = Record(rid, self.key, columns)
             records.append(record)
@@ -329,7 +373,8 @@ class Table:
                 page.write(update_value)
             else:
                 page.write(0)
-        tail_rid = self.get_rid()
+        tail_rid = self.global_rid_space.assign_tail_rid()
+        # place metadata into list for easy access in upcoming for loop
         metadata.append(tail_rid)
         metadata.append(int(time()))
         metadata.append(schema_encoding)
@@ -340,18 +385,25 @@ class Table:
             if k != 3:
                 page.write(metadata[k])
             else:
-                schema_encoding_str = ''.join(schema_encoding)
-                page.write_schema(schema_encoding_str)
+                schema_encoding = ''.join(schema_encoding)
+                page.write_schema(schema_encoding)
         # update indirection column of base record
-        # get page containing indirection pointers
+        # get page containing indirection pointers and update
         indir_page_id = rid_tuple[0]+self.num_columns
         page = self.pages[self.page_index[indir_page_id]]
         offset = rid_tuple[2]
-        page.update(tail_rid,offset)
-        self.page_directory[tail_rid] = (tail_page_range[0],tail_page_range[-1],tail_record_offset, rid_tuple[3])
-        tail_records = self.get_full_record([tail_rid])
-        print(tail_records[0].columns)
-
+        page.update(tail_rid, offset)
+        # update schema encoding column of base record
+        # get page containing schema encodings and update
+        schema_page_id = indir_page_id + 3
+        page = self.pages[self.page_index[schema_page_id]]
+        base_schema = page.read_schema(self.num_columns,offset) 
+        base_schema = bin(int(base_schema,2) | int(schema_encoding,2))
+        page.update_schema(base_schema[2:], offset)
+        # create the following page directory entry:
+        # tail_rid -> (id0,idn,offset,page_range)
+        self.page_directory[tail_rid] = (tail_page_range[0],tail_page_range[-1],
+                tail_record_offset, rid_tuple[3])
 
     def update_record(self, rid, column_update):
         rid_tuple = self.page_directory[rid]
@@ -359,18 +411,34 @@ class Table:
         page_range = self.page_ranges[page_range_idx]
         
         """
-        if no tail pages have been allocated for this page range, the
+        if no tail pages have been allocated for this page range, then
         allocate some. Clearly, if page range containing the record to be
         updated is only large enough to accomodate the base pages and meta
         data pages, then no tail pages have been allocated
         """
         if len(page_range) == self.num_columns + 4:
             self.allocate_tail_pages(page_range)
-        # TODO: if tail pages full allocate new set of tail pages
+        else:
+            """ 
+            page ids for tail pages are always inserted into page range after
+            ids for base pages (simply due to order in which they are created).
+            get a physical tail page via last page id in page range
+            """
+            tail_page = self.pages[self.page_index[page_range[-1]]]
+            """
+            A given set of tail records will span multiple physical pages, but
+            since alll values associated with a record will occupy the same
+            amount of space (64 bits), each physical tail page will have the
+            same capacity. Hence, if one tail page is full, all tail pages for
+            a tail record are full
+            """
+            if tail_page.has_capacity() == False:
+                self.allocate_tail_pages(page_range)
+
         indir_col = self.pages[self.page_index[rid_tuple[0]+self.num_columns]]
         indir_rid = indir_col.read(rid_tuple[2])
         tail_page_range = page_range[-(self.num_columns + 4):]
-        self.insert_tail_record(tail_page_range, column_update, indir_rid,rid_tuple)
+        self.insert_tail_record(tail_page_range, column_update, indir_rid, rid_tuple)
 
     def __merge(self):
         pass
