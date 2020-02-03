@@ -1,5 +1,5 @@
-from table import Table, Record
-from index import Index
+from lstore.table import Table, Record
+from lstore.index import Index
 
 
 class Query:
@@ -72,6 +72,6 @@ class Query:
             if len(rids) is not 0:
                 records = self.table.get_records(rids, query_columns)
                 for record in records:
-                    column_sum += record.columns[0]
+                    column_sum += record.columns[aggregate_column_index]
         return column_sum
         pass

@@ -1,4 +1,4 @@
-from page import Page
+from lstore.page import Page
 from time import time
 
 INDIRECTION_COLUMN = 3
@@ -200,12 +200,16 @@ class Table:
                         page = self.pages[self.page_index[page_id]]
                         column_val = page.read(rid_tuple[2])
                         columns.append(column_val)
+                    else:
+                        columns.append(None)
             else:
                 updated_record_columns = self.get_most_recent_update(rid,
                         indirection_pointer, query_columns)
                 for idx in range(len(query_columns)):
                     if query_columns[idx] == 1:
                         columns.append(updated_record_columns[idx])
+                    else:
+                        columns.append(None)
             record = Record(rid, self.key, columns)
             records.append(record)
         return records

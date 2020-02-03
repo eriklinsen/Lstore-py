@@ -1,4 +1,4 @@
-from table import Table
+from lstore.table import Table
 
 """
 # optional: Indexes the specified column of the specified table to speed up select queries
