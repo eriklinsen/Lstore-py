@@ -1,6 +1,6 @@
 from db import Database
 from query import Query
-# from config import init
+from config import init
 
 from random import choice, randint, sample
 from colorama import Fore, Back, Style

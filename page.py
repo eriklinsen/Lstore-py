@@ -22,25 +22,25 @@ class Page:
     def write(self, value):
         self.num_records += 1
         write_pos = self.num_records*8
-        self.data[(write_pos-8):(write_pos)] = struct.pack('>Q', value)
+        self.data[(write_pos-8):(write_pos)] = struct.pack('>q', value)
         pass
     # must be used to write schema
     def write_schema(self, schema_encoding):
         self.num_records += 1
         write_pos = self.num_records*8
-        self.data[(write_pos-8):(write_pos)] = struct.pack('>Q', int(schema_encoding,2))
+        self.data[(write_pos-8):(write_pos)] = struct.pack('>q', int(schema_encoding,2))
     
     # used to update pre-existing values
     def update(self, value, offset):
-        self.data[(offset+1)*8 - 8:8*(offset+1)] = struct.pack('>Q', value)
+        self.data[(offset+1)*8 - 8:8*(offset+1)] = struct.pack('>q', value)
 
     def update_schema(self, schema_encoding, offset):
-        self.data[(offset+1)*8 - 8:8*(offset+1)] = struct.pack('>Q',
+        self.data[(offset+1)*8 - 8:8*(offset+1)] = struct.pack('>q',
                 int(schema_encoding,2))
 
     # used to read data from page:
     def read(self, offset):
-        return struct.unpack('>Q', self.data[(offset+1)*8 - 8:8*(offset+1)])[0]
+        return struct.unpack('>q', self.data[(offset+1)*8 - 8:8*(offset+1)])[0]
 
     # must be used to read schema
     def read_schema(self, num_columns, offset):

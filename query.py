@@ -1,5 +1,5 @@
-from lstore.table import Table, Record
-from lstore.index import Index
+from table import Table, Record
+from index import Index
 
 
 class Query:
@@ -13,11 +13,14 @@ class Query:
         pass
 
     """
-    # internal Method
-    # Read a record with specified RID
+    # delete a record with specified key
     """
 
     def delete(self, key):
+        rids = self.idx.locate(key)
+        for rid in rids:
+           self.table.invalidate_record(rid)
+           self.idx.delete(key)
         pass
 
     """
@@ -26,7 +29,7 @@ class Query:
 
     def insert(self, *columns):
         rid = self.table.insert_base_record(*columns)
-        self.idx.update_index(rid,self.table.key)
+        self.idx.add_key(rid,self.table.key)
         pass
 
     """
@@ -40,7 +43,7 @@ class Query:
             return []
         rids = self.idx.locate(key)
         if len(rids) is not 0:
-            records = self.table.get_records(rids, query_columns)      
+            records = self.table.get_records(rids, query_columns, key)      
             return records
         else:
             return []
@@ -51,10 +54,13 @@ class Query:
     """
 
     def update(self, key, *columns):
+        
         rids = self.idx.locate(key)
         if len(rids) is not 0:
             for rid in rids:
                 self.table.update_record(rid, columns)
+                if columns[self.table.key] != None:
+                    self.idx.update_index(rid, key, columns[self.table.key])
         pass
 
     """
@@ -70,7 +76,7 @@ class Query:
         for key in range(start_range, end_range+1):
             rids = self.idx.locate(key)
             if len(rids) is not 0:
-                records = self.table.get_records(rids, query_columns)
+                records = self.table.get_records(rids, query_columns, key)
                 for record in records:
                     column_sum += record.columns[aggregate_column_index]
         return column_sum

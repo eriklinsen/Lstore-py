@@ -1,4 +1,4 @@
-from lstore.table import Table
+from table import Table
 
 """
 # optional: Indexes the specified column of the specified table to speed up select queries
@@ -51,7 +51,7 @@ class Index:
     # optional: Drop index of specific column
     """
 
-    def update_index(self, rid, column_number):
+    def add_key(self, rid, column_number):
         rid_tuple = self.table.page_directory[rid]
         page_id = rid_tuple[0] + column_number
         page = self.table.pages[self.table.page_index[page_id]]
@@ -62,10 +62,24 @@ class Index:
         except KeyError:
             self.idx[key_value] = [rid]
 
+    def update_index(self, rid, old_key, new_key):
+        self.idx[old_key].remove(rid)
+        if self.idx[old_key] == []:
+            del self.idx[old_key]
+        try:
+            if rid not in self.idx[new_key]:
+                self.idx[new_key].append(rid)
+        except KeyError:
+            self.idx[new_key] = [rid]
+
+
 
 
     def drop_index(self, table, column_number):
         pass
+
+    def delete(self, key):
+        self.idx[key].pop(0)
 
     def print_index(self):
         print(self.idx)

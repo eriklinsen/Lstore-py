@@ -1,4 +1,4 @@
-from lstore.page import Page
+from page import Page
 from time import time
 
 INDIRECTION_COLUMN = 3
@@ -106,8 +106,8 @@ class Table:
         self.pages = []
         pass
 
-    def get_num_records(self):
-        return self.num_records
+
+# ==================== HELPER FUNCTIONS ====================
 
     """
     Return a new unique rid for record.
@@ -136,6 +136,8 @@ class Table:
                 return False
             else:
                 return True
+
+# ==================== RECORD RETRIEVAL ====================
 
     """
     Used by select function in Query class.
@@ -185,7 +187,7 @@ class Table:
             indirection_pointer = indir_col.read(tail_tuple[2])
         return columns
 
-    def get_records(self, rids, query_columns):
+    def get_records(self, rids, query_columns, key):
         records = []
         for rid in rids:
             rid_tuple = self.page_directory[rid]
@@ -205,12 +207,14 @@ class Table:
             else:
                 updated_record_columns = self.get_most_recent_update(rid,
                         indirection_pointer, query_columns)
+                key = updated_record_columns[self.key]
                 for idx in range(len(query_columns)):
                     if query_columns[idx] == 1:
                         columns.append(updated_record_columns[idx])
                     else:
                         columns.append(None)
-            record = Record(rid, self.key, columns)
+            
+            record = Record(rid, key, columns)
             records.append(record)
         return records
 
@@ -219,7 +223,7 @@ class Table:
 
     :param rids: list   # rids of all records to be retrieved
     """
-    def get_full_record(self, rids):
+    def get_full_record(self, rids, key):
         records = []
         for rid in rids:
             rid_tuple = self.page_directory[rid]
@@ -242,9 +246,11 @@ class Table:
                     column_val = page.read_schema(self.num_columns,
                             rid_tuple[2])
                 columns.append(column_val)
-            record = Record(rid, self.key, columns)
+            record = Record(rid, key, columns)
             records.append(record)
         return records
+
+# ==================== INSERTING NEW RECORDS ====================
 
     """
     Used by insert function in Query class:
@@ -345,6 +351,8 @@ class Table:
             # return rid of newly created record
             return rid
 
+# ==================== UPDATING AND TAIL RECORD CREATION ====================
+
     """
     :param page_range: list     # page range to be updated with tail page
                                       id's
@@ -439,10 +447,36 @@ class Table:
             if tail_page.has_capacity() == False:
                 self.allocate_tail_pages(page_range)
 
-        indir_col = self.pages[self.page_index[rid_tuple[0]+self.num_columns]]
-        indir_rid = indir_col.read(rid_tuple[2])
+        indir_page = self.pages[self.page_index[rid_tuple[0]+self.num_columns]]
+        indirection_pointer = indir_page.read(rid_tuple[2])
         tail_page_range = page_range[-(self.num_columns + 4):]
-        self.insert_tail_record(tail_page_range, column_update, indir_rid, rid_tuple)
+        self.insert_tail_record(tail_page_range, column_update,
+                indirection_pointer, rid_tuple)
+
+# ==================== RECORD INVALIDATION ====================
+
+    def invalidate_tail_records(self, indirection_pointer):
+        while indirection_pointer != 0:
+            tail_tuple = self.page_directory[indirection_pointer]
+            rid_page_id = tail_tuple[1] - RID_COLUMN
+            rid_page = self.pages[self.page_index[rid_page_id]]
+            rid_page.update(0,tail_tuple[2])
+            indir_page = self.pages[self.page_index[tail_tuple[0]+self.num_columns]]
+            del self.page_directory[indirection_pointer]
+            indirection_pointer = indir_page.read(tail_tuple[2])
+
+
+    def invalidate_record(self, rid):
+        rid_tuple = self.page_directory[rid]
+        rid_page_id = rid_tuple[1] - RID_COLUMN
+        rid_page = self.pages[self.page_index[rid_page_id]]
+        # invalidate base record:
+        rid_page.update(0,rid_tuple[2])
+        # obtain indirection pointer to perform tail record invalidation
+        indir_page = self.pages[self.page_index[rid_tuple[0]+self.num_columns]]
+        indirection_pointer = indir_page.read(rid_tuple[2])
+        self.invalidate_tail_records(indirection_pointer)
+        del self.page_directory[rid]
 
     def __merge(self):
         pass
