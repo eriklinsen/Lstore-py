@@ -26,7 +26,7 @@ class Index:
         pass
 
     """
-    # optional: Create index on specific column
+    # Create index on specific column
     """
 
     def create_index(self, column_number):
@@ -48,7 +48,7 @@ class Index:
         pass
 
     """
-    # optional: Drop index of specific column
+    # add a new key, rid pair to index
     """
 
     def add_key(self, rid, column_number):

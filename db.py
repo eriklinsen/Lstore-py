@@ -46,4 +46,8 @@ class Database():
     # Deletes the specified table
     """
     def drop_table(self, name):
+        for i in range(len(tables)):
+            if tables[i] == name:
+                tables.pop(i)
+                return 
         pass

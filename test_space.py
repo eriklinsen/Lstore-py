@@ -22,7 +22,7 @@ def dump_pages(table):
         page.print_data()
 
 def show_records(records):
-    if records is [] or records is None:
+    if records == [] or records is None:
         print('no records found')
     else:
         for record in records:
@@ -68,8 +68,9 @@ print(query1.sum(3,10,3))
 
 print('===output a single record with metadata===')
 # full record test:
-r1 = query1.idx.locate(15)
-full_r1 = table1.get_full_record(r1)
+key = 15
+r1 = query1.idx.locate(key)
+full_r1 = table1.get_full_record(r1, key)
 show_records(full_r1)
 
 
@@ -90,15 +91,26 @@ show_records(r1)
 print('===perform 10k updates on table1===')
 update_time_0 = process_time()
 for i in range(1,10001):
-    query1.update(15, None,i,None,None)
+    query1.update(key, None,i,None,None)
 update_time_1 = process_time()
 print('Updating a record 10k times took: \t\t\t', update_time_1 - update_time_0)
-r1 = query1.select(15,[1,1,1,1])
+r1 = query1.select(key,[1,1,1,1])
 print('updated record:')
 show_records(r1)
 print('updated record with metadata:')
-records = table1.get_full_record([r1[0].rid])
+records = table1.get_full_record([r1[0].rid], key)
 show_records(records)
+print('===update key of record===')
+query1.update(key, 2,None,None,None) 
+r1 = query1.select(2, [1,1,1,1])
+key = 2
+show_records(r1)
+print('===index after key update===')
+print(query1.idx.print_index())
+print('===multiple simul. updates===')
+query1.update(key, None,5,3,1)
+r1 = query1.select(key, [1,1,1,1])
+show_records(r1)
 
 print('===perform 10k inserts on table2===')
 # bigger insert and select test:
@@ -118,10 +130,23 @@ records_one = query2.select(906659671+600, [1,1,1,1,1])
 records_two = query2.select(906659671+5000, [1,1,1,1,1])
 show_records(records_one)
 show_records(records_two)
+print('===perform another update==')
+query2.update(906659671+600, 1, 100, None, None, None)
+records_one = query2.select(1, [1,1,1,1,1])
+show_records(records_one)
 
 print('===performing sum on table2===')
-# sums up 0 + 1 + 2 + 3 + .... + 10. Should be 55
+print('sums up 0 + 1 + 2 + 3 + .... + 10. Should be 55')
 print(query2.sum(906659671, 906659671+10, 2))
-# sums up 0 + 1 + 2 + ..... 2500. Should be 3126250
+print('sums up 0 + 1 + 2 + ..... 2500. Should be 3126250')
 print(query2.sum(906659671, 906659671+2500, 2))
+
+# print(table1.page_directory)
+print('===delete a record with a lot of tail records===')
+query1.delete(2)
+r1 = query1.select(2,[1,1,1,1])
+print('table 1 page directory after deleting record with key = 2')
+print(table1.page_directory)
+print('No record should be returned by select')
+show_records(r1)
 

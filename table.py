@@ -173,13 +173,13 @@ class Table:
             tail_schema_col = self.pages[self.page_index[tail_schema_id]]
             tail_schema = tail_schema_col.read_schema(self.num_columns,
                     tail_tuple[2])
-            updated_idx = tail_schema.find('1')
-            if tail_encodings[updated_idx] == '0':
-                page = self.pages[self.page_index[tail_tuple[0] + updated_idx]]
-                columns[updated_idx] = page.read(tail_tuple[2])
-                tail_encodings = list(tail_encodings)
-                tail_encodings[updated_idx] = '1'
-                tail_encodings = ''.join(tail_encodings)
+            for idx in range(len(tail_schema)):
+                if tail_schema[idx] == '1' and tail_encodings[idx] == '0':
+                    page = self.pages[self.page_index[tail_tuple[0] + idx]]
+                    columns[idx] = page.read(tail_tuple[2])
+                    tail_encodings = list(tail_encodings)
+                    tail_encodings[idx] = '1'
+                    tail_encodings = ''.join(tail_encodings)
             if int(tail_encodings,2) & int(base_schema,2) == int(base_schema,2):
                 break
             indir_id = tail_tuple[0] + self.num_columns
