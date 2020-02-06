@@ -26,9 +26,10 @@ update_cols = [
     [None, None, None, randrange(0, 100), None],
     [None, None, None, None, randrange(0, 100)],
 ]
+
 update_time_0 = process_time()
 for i in range(0, 10000):
-    query.update(choice(keys), choice(update_cols))
+    query.update(choice(keys), *(choice(update_cols)))
 update_time_1 = process_time()
 print("Updating 10k records took:  \t\t\t", update_time_1 - update_time_0)
 
@@ -46,11 +47,9 @@ for i in range(0, 10000, 100):
 agg_time_1 = process_time()
 print("Aggregate 10k of 100 record batch took:\t", agg_time_1 - agg_time_0)
 
-"""
 # Measuring Delete Performance
 delete_time_0 = process_time()
 for i in range(0, 10000):
     query.delete(906659671 + i)
 delete_time_1 = process_time()
 print("Deleting 10k records took:  \t\t\t", delete_time_1 - delete_time_0)
-"""
