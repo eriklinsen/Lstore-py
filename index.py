@@ -26,10 +26,13 @@ class Index:
     Create index on specific column
     """
     def create_index(self, column_number):
+        self.table.directory_lock.acquire()
         if column_number >= self.table.num_columns:
             print('error: cannot create index on column that does not exist')
             return
         for rid in self.table.page_directory:
+            if rid > self.table.rid_block[1]:
+                continue
             # obtain page-related information for given rid:
             rid_tuple = self.table.page_directory[rid]
             # obtain id of page containing key value
@@ -43,6 +46,7 @@ class Index:
                 self.idx[key_value].append(rid)
             else:
                 self.idx[key_value] = [rid]
+        self.table.directory_lock.release()
 
     """
     Add a new key, rid pair to index

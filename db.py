@@ -59,7 +59,6 @@ class Database():
             f1.close()
             f2.close()
             table_data = self.table_data[:]
-            print(table_data)
             for bundle in table_data:
                 table = self.create_table(bundle[0], bundle[1], bundle[2])
 
@@ -103,7 +102,12 @@ class Database():
     def drop_table(self, name):
         try:
             i = self.table_map[name]
+            table_to_be_deleted = self.tables[i]
+            table_to_be_deleted.delete_files()
             self.tables.pop(i)
+            for i in range(len(self.table_data)):
+                if self.table_data[i][0] == name:
+                    self.table_data.pop(i)
         except KeyError:
             pass
     

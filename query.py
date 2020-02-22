@@ -36,7 +36,7 @@ class Query:
     """
     def select(self, key, column_index, query_columns):
         # *** CURRENTLY CREATING INDEX IF USER SELECTS ON A COLUMN THAT IS NOT
-        # INDEXED. I'M NOT SURE IF THIS HOW WE SHOULD IT
+        # INDEXED. I'M NOT SURE IF THIS HOW WE SHOULD DO IT
         if len(query_columns) is not self.table.num_columns:
             print('select error: number of queried columns must match number of columns in table')
             return []

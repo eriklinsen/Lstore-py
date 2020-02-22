@@ -3,6 +3,7 @@ from time import time
 import pickle
 import pathlib
 import threading
+import os
 
 INDIRECTION_COLUMN = 3
 RID_COLUMN = 2
@@ -212,6 +213,11 @@ class Table:
             f.close()
         except FileNotFoundError:
             self.init_table_dir()
+
+    def delete_files(self):
+        os.unlink(self.name+'/page_file')
+        os.unlink(self.name+'/metadata')
+        os.rmdir(self.name)
         
 # ==================== HELPER FUNCTIONS ====================
 
@@ -394,7 +400,7 @@ class Table:
             indir_id = tail_tuple[0] + self.num_columns
             indir_col = self.pages[self.page_index[indir_id]]
             indirection_pointer = indir_col.read(tail_tuple[2])
-            if indirection_pointer > tps:
+            if indirection_pointer > tps and tps !=0:
                 break
         return columns
 
@@ -785,7 +791,7 @@ class Table:
 
     def __merge(self):
         self.merging = True
-        # print('Merge begin!')
+        print('Merge begin!')
         updated_mappings = {}
         for update_range in self.merge_queue:
             tail_page_ids = update_range[self.num_columns+4:]
@@ -815,9 +821,9 @@ class Table:
         self.modify_page_directory(updated_mappings)
         # print('outputing merged pages for range: ', sep='')
         # print(update_range)
-        # self.output_pages(base_page_ids)
+        #self.output_pages(base_page_ids)
         self.merging = False
         self.merge_queue = []
-        # print('Merge terminated!')
+        print('Merge terminated!')
         pass
 
