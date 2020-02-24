@@ -7,8 +7,7 @@ class BufferPool:
         self.limit = size
         self.pages = []
         self.table_index = {}
-        # self.dirty_map = {}
-        # self.pinned_map = {}
+        self.eviction_queue = []
 
     def get_page(self, table_name, page_id):
         try:
@@ -19,23 +18,48 @@ class BufferPool:
 
         try:
             location = sub_directory[page_id]
+            self.eviction_queue.append((table_name, page_id))
             return self.pages[location]
         except KeyError:
             if len(self.pages) < self.limit:
-                sub_directory[page_id] = len(self.pages)
-                location = sub_directory[page_id]
-                self.fetch(table_name, page_id, None)
+                location = self.fetch(table_name, page_id, None)
+                self.eviction_queue.append((table_name, page_id))
+                sub_directory[page_id] = location
                 return self.pages[location]
-            # else:
-            #   location = self.evict()
-        pass
+            else:
+               location = self.evict()
+               self.fetch(table_name, page_id, location)
+               sub_directory[page_id] = location
+               self.eviction_queue.append((table_name, page_id))
+               return self.pages[location]
 
-    def allocate(self, table_name, num_pages):
-        path = table_name+'/page_file'
-        f = open(path, mode='ab')
-        page_bytes = bytearray(4096*num_pages)
-        f.write(page_bytes)
-        f.close()
+    def allocate(self, table_name, page_id):
+        if len(self.pages) < self.limit:
+            page = Page(page_id)
+            self.pages.append(page)
+            location = self.pages.index(page)
+        else:
+            location = self.evict()
+            page = Page(page_id)
+            self.pages[location] = page
+
+        try:
+            sub_directory = self.table_index[table_name]
+        except KeyError:
+            self.table_index[table_name] = {}
+            sub_directory = self.table_index[table_name]
+        sub_directory[page_id] = location
+         
+        # else:
+        #   evict()
+        #   page = Page(page_id)
+        #   self.pages.append(page)
+
+        #path = table_name+'/page_file'
+        #f = open(path, mode='ab')
+        #page_bytes = bytearray(4096*num_pages)
+        #f.write(page_bytes)
+        #f.close()
 
     def fetch(self, table_name, page_id, location):
         path = table_name+'/page_file'
@@ -46,12 +70,22 @@ class BufferPool:
         page.load_data(read_data)
         if location == None:
             self.pages.append(page)
+            location = self.pages.index(page)
         else:
             self.pages[location] = page
         f.close()
+        return location
 
     def evict(self):
-        pass
+        for e in self.eviction_queue:
+            page = self.pages[self.table_index[e[0]][e[1]]]
+            if page.pinned == 0:
+                self.eviction_queue.pop(self.eviction_queue.index(e))
+                if page.dirty:
+                    self.write_page(page, e[1], e[0])
+                del self.table_index[e[0]][e[1]]
+                location = self.pages.index(page)
+                return location
 
     def write_page(self, page, page_id, table_name):
         path = table_name+'/page_file'

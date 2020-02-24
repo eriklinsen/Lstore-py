@@ -6,10 +6,19 @@ class Page:
     def __init__(self, page_id):
         self.num_records = 2
         self.pg_id = page_id
+        self.dirty = False
+        self.pinned = 0
         self.data = bytearray(4096)
 
     def get_id(self):
         return self.pg_id
+
+    def pin(self):
+        self.pinned += 1
+
+    def unpin(self):
+        if self.pinned != 0:
+            self.pinned -= 1
 
     def has_capacity(self):
         return (self.num_records - 2) != 510
@@ -27,6 +36,7 @@ class Page:
         write_pos = self.num_records*8
         self.data[(write_pos-8):(write_pos)] = struct.pack('>q', value)
         self.update(self.num_records, 1)
+        self.dirty = True
 
     # must be used to write schema
     def write_schema(self, schema_encoding):
@@ -37,6 +47,7 @@ class Page:
         write_pos = self.num_records*8
         self.data[(write_pos-8):(write_pos)] = struct.pack('>q', int(schema_encoding,2))
         self.update(self.num_records, 1)
+        self.dirty = True
     
     # used to update pre-existing values
     def update(self, value, offset):
@@ -44,6 +55,7 @@ class Page:
             print('page update error: offset out of range.')
             return
         self.data[(offset+1)*8 - 8:8*(offset+1)] = struct.pack('>q', value)
+        self.dirty = True
 
     def update_schema(self, schema_encoding, offset):
         if offset > 511 or offset < 0:
@@ -51,6 +63,7 @@ class Page:
             return
         self.data[(offset+1)*8 - 8:8*(offset+1)] = struct.pack('>q',
                 int(schema_encoding,2))
+        self.dirty = True
 
     # used to read data from page:
     def read(self, offset):
@@ -71,4 +84,9 @@ class Page:
     def load_data(self, read_data):
         for i in range(len(read_data)):
             self.data[i] = read_data[i]
-        self.num_records = struct.unpack('>q', self.data[8:16])[0]
+        recorded_num = struct.unpack('>q', self.data[8:16])[0]
+        if recorded_num != 0:
+            self.num_records = recorded_num
+        else:
+            self.data[8:16] = struct.pack('>q', self.num_records)
+
