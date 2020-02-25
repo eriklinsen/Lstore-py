@@ -12,6 +12,7 @@ class Query:
         self.primary_key = table.key
         self.indexes = {}
         self.indexes[self.primary_key] = Index(table)
+        self.bp = self.table.bp
         if self.table.num_records > 0:
             self.indexes[self.primary_key].create_index(self.primary_key)
 
@@ -28,15 +29,13 @@ class Query:
     """
     def insert(self, *columns):
         rid = self.table.insert_base_record(*columns)
-        self.indexes[self.primary_key].add_key(rid,self.primary_key)
+        self.indexes[self.primary_key].add_key(rid,self.primary_key, self.bp)
 
     """
     Read a record with specified key. Will return an empty list if query
     cannot be completed or if no records are found.
     """
     def select(self, key, column_index, query_columns):
-        # *** CURRENTLY CREATING INDEX IF USER SELECTS ON A COLUMN THAT IS NOT
-        # INDEXED. I'M NOT SURE IF THIS HOW WE SHOULD DO IT
         if len(query_columns) is not self.table.num_columns:
             print('select error: number of queried columns must match number of columns in table')
             return []

@@ -26,35 +26,42 @@ class Index:
     Create index on specific column
     """
     def create_index(self, column_number):
-        self.table.directory_lock.acquire()
         if column_number >= self.table.num_columns:
             print('error: cannot create index on column that does not exist')
             return
+        query_columns = [0]*self.table.num_columns
+        query_columns[column_number] = 1
+
         for rid in self.table.page_directory:
             if rid > self.table.rid_block[1]:
                 continue
+            record = self.table.get_records([rid], query_columns, 0)[0]
+            """
             # obtain page-related information for given rid:
             rid_tuple = self.table.page_directory[rid]
             # obtain id of page containing key value
             page_id = rid_tuple[0] + column_number
             # obtain page containing key value
-            page = self.table.pages[self.table.page_index[page_id]]
+            # page = self.table.pages[self.table.page_index[page_id]]
+            page = bp.get_page(self.table.name, page_id)
             # read key value from page
-            key_value = page.read(rid_tuple[2])
+            """
+            key_value = record.columns[column_number]
             self.rid_map[rid] = key_value
             if key_value in self.idx.keys() and rid not in self.idx[key_value]:
                 self.idx[key_value].append(rid)
             else:
                 self.idx[key_value] = [rid]
-        self.table.directory_lock.release()
 
     """
     Add a new key, rid pair to index
     """
-    def add_key(self, rid, column_number):
+    def add_key(self, rid, column_number, bp):
+        self.table.directory_lock.acquire()
         rid_tuple = self.table.page_directory[rid]
         page_id = rid_tuple[0] + column_number
-        page = self.table.pages[self.table.page_index[page_id]]
+        # page = self.table.pages[self.table.page_index[page_id]]
+        page = bp.get_page(self.table.name, page_id)
         key_value = page.read(rid_tuple[2])
         try:
             if rid not in self.idx[key_value]:
@@ -63,6 +70,7 @@ class Index:
         except KeyError:
             self.idx[key_value] = [rid]
             self.rid_map[rid] = key_value
+        self.table.directory_lock.release()
 
     """
     Update prexisting key, rid pair. From old_key->rid to new_key->rid

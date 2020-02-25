@@ -1,4 +1,5 @@
 from table import Table
+from buffer_pool import BufferPool
 import pathlib
 import pickle
 
@@ -27,6 +28,7 @@ class Database():
         self.table_data = []
         self.table_map = {}
         self.rid_space = RIDspace()
+        self.bp = BufferPool(1000)
         self.root_path = None
 
     """
@@ -78,6 +80,7 @@ class Database():
             f.close()
             for table in self.tables:
                 table.close_table()
+            self.bp.flush()
         except FileNotFoundError:
             print('db close error: cannot close without ever having opened')
 
@@ -89,7 +92,7 @@ class Database():
     :param key: int             #Index of table key in columns
     """
     def create_table(self, name, num_columns, key):
-        table = Table(name, num_columns, key, self.rid_space)
+        table = Table(name, num_columns, key, self.rid_space, self.bp)
         self.tables.append(table)
         self.table_data.append((name, num_columns, key))
         table.open_table()

@@ -1,5 +1,6 @@
 from page import Page
-import pathlib
+import threading
+import sys
 
 class BufferPool:
     
@@ -8,8 +9,10 @@ class BufferPool:
         self.pages = []
         self.table_index = {}
         self.eviction_queue = []
+        self.buffer_lock = threading.Lock()
 
     def get_page(self, table_name, page_id):
+        self.buffer_lock.acquire()
         try:
             sub_directory = self.table_index[table_name]
         except KeyError:
@@ -18,19 +21,37 @@ class BufferPool:
 
         try:
             location = sub_directory[page_id]
+            try:
+                i = self.eviction_queue.index((table_name, page_id))
+                self.eviction_queue.pop(i)
+            except ValueError:
+                pass
             self.eviction_queue.append((table_name, page_id))
+            self.buffer_lock.release()
             return self.pages[location]
         except KeyError:
             if len(self.pages) < self.limit:
-                location = self.fetch(table_name, page_id, None)
+                location = self.fetch(table_name, page_id, None) 
+                try:
+                    i = self.eviction_queue.index((table_name, page_id))
+                    self.eviction_queue.pop(i)
+                except ValueError:
+                    pass
                 self.eviction_queue.append((table_name, page_id))
                 sub_directory[page_id] = location
+                self.buffer_lock.release()
                 return self.pages[location]
             else:
                location = self.evict()
                self.fetch(table_name, page_id, location)
                sub_directory[page_id] = location
+               try:
+                   i = self.eviction_queue.index((table_name, page_id))
+                   self.eviction_queue.pop(i)
+               except ValueError:
+                   pass
                self.eviction_queue.append((table_name, page_id))
+               self.buffer_lock.release()
                return self.pages[location]
 
     def allocate(self, table_name, page_id):
@@ -50,17 +71,6 @@ class BufferPool:
             sub_directory = self.table_index[table_name]
         sub_directory[page_id] = location
          
-        # else:
-        #   evict()
-        #   page = Page(page_id)
-        #   self.pages.append(page)
-
-        #path = table_name+'/page_file'
-        #f = open(path, mode='ab')
-        #page_bytes = bytearray(4096*num_pages)
-        #f.write(page_bytes)
-        #f.close()
-
     def fetch(self, table_name, page_id, location):
         path = table_name+'/page_file'
         f = open(path, mode='rb+')
@@ -89,10 +99,13 @@ class BufferPool:
 
     def write_page(self, page, page_id, table_name):
         path = table_name+'/page_file'
-        f = open(path, mode='rb+')
-        f.seek(4096*page_id)
-        f.write(page.data)
-        f.close
+        try:
+            f = open(path, mode='rb+')
+            f.seek(4096*page_id)
+            f.write(page.data)
+            f.close
+        except FileNotFoundError:
+            pass
 
     def flush(self):
         for table in self.table_index:
