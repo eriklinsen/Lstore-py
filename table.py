@@ -1,5 +1,6 @@
 from page import Page
 from time import time
+from index import Index
 import pickle
 import pathlib
 import threading
@@ -150,8 +151,9 @@ class Table:
 
         self.page_ids = 0
        
-        # self.pages = []
         self.bp = buffer_pool
+
+        self.index = Index(self)
 
         pass
 
@@ -197,6 +199,7 @@ class Table:
             self.page_directory = metadata[5]
             self.merge_queue = metadata[6]
             self.num_records = metadata[7]
+            self.index = Index(self)
             f.close()
         except FileNotFoundError:
             self.init_table_dir()
@@ -685,13 +688,11 @@ class Table:
         tail_record_data = []
         for i in range(self.num_columns):
             page_id = id_segment[i]
-            # tail_page = self.pages[self.page_index[page_id]]
             tail_page = page = self.bp.get_page(self.name, page_id)
             data = tail_page.read(offset)
             tail_record_data.append(data)
         for k in range(5):
             page_id = id_segment[self.num_columns + k]
-            # tail_page = self.pages[self.page_index[page_id]]
             tail_page = page = self.bp.get_page(self.name, page_id)
             if k != 3:
                 data = tail_page.read(offset)
@@ -703,8 +704,7 @@ class Table:
             
     def process_tail_page(self, id_segment):
         tail_records = []
-        tail_id = id_segment[-1]
-        # tail_page = self.pages[self.page_index[tail_id]]
+        tail_id = id_segment[-1] 
         tail_page = self.bp.get_page(self.name, tail_id)
         offset = tail_page.num_records - 1
         while offset >= 1:
@@ -715,8 +715,7 @@ class Table:
     def write_tps_to_base(self, base_page_ids, tail_records):
         most_recent_update = tail_records[0]
         tail_id = most_recent_update[-4]
-        for page_id in base_page_ids:
-            # page = self.pages[self.page_index[page_id]]
+        for page_id in base_page_ids: 
             page = page = self.bp.get_page(self.name, page_id)
             page.update(tail_id, 0)
 
@@ -739,8 +738,7 @@ class Table:
                 for i in range(len(base_page_ids)):
                     if tail_schema[i] == '1' and tail_encoding[i] == '0':
                         data = tail_record[i]
-                        base_page_id = base_page_ids[i]
-                        # base_page = self.pages[self.page_index[base_page_id]]
+                        base_page_id = base_page_ids[i] 
                         base_page = page = self.bp.get_page(self.name, base_page_id)
                         base_page.update(data, base_offset)
                 # following list comprehension was taken from stack overflow.
@@ -755,18 +753,15 @@ class Table:
                 if base_rid not in updated_mappings:
                     updated_mappings[base_rid] = (base_page_ids, base_tuple[3])
 
-
                         
     def process_tail_records(self, id_segments, base_page_ids, updated_mappings):
         tps_updated = False
         while id_segments != []:
             latest_segment = id_segments[-1]
             tail_records = self.process_tail_page(latest_segment)
-            
             if not tps_updated:
                 self.write_tps_to_base(base_page_ids, tail_records)
                 tps_updated = True
-
             self.write_updates_to_base_pages(tail_records, base_page_ids,
                     updated_mappings)
             id_segments.pop(-1)
@@ -774,17 +769,16 @@ class Table:
     def copy_base_pages(self, base_page_ids, update_range):
         for i in range(len(base_page_ids)):
             new_page_id = base_page_ids[i]
-            old_page_id = update_range[i]
-            #old_page = self.pages[self.page_index[old_page_id]]
-            #new_page = self.pages[self.page_index[new_page_id]]
+            old_page_id = update_range[i]  
             old_page = self.bp.get_page(self.name, old_page_id)
             new_page = self.bp.get_page(self.name, new_page_id)
             for k in range(0,512):
                 old_data = old_page.read(k)
                 new_page.update(old_data,k)
     
-    def modify_page_directory(self, updated_mappings):
+    def modify_page_directory(self, updated_mappings, stale_page_ids):
         self.directory_lock.acquire()
+        stale_page_ids = set(stale_page_ids)
         for rid in updated_mappings.keys():
             base_page_ids = updated_mappings[rid][0]
             old_tuple = self.page_directory[rid]
@@ -795,31 +789,21 @@ class Table:
             self.page_directory[rid] = new_tuple
             for i in range(len(base_page_ids)):
                 page_range[i] = base_page_ids[i]
+            page_range = set(page_range)
+            page_range = page_range - stale_page_ids
+            page_range = list(page_range)
         self.directory_lock.release()
-
-    """
-    Used for testing purposes:
-    """
-    def output_pages(self, base_page_ids):
-        b = []
-        for i in range(512):
-            rec = []
-            for bid in base_page_ids:
-                # page = self.pages[self.page_index[bid]]
-                page = self.bp.get_page(self.name, bid)
-                data = page.read(i)
-                rec.append(data)
-            b.append(rec)
-        for l in range(512):
-            print('record:', end=' ')
-            print(l, end=' ')
-            print(b[l])
 
     def __merge(self):
         self.merging = True
         updated_mappings = {}
+        stale_tail_page_ids = []
         for update_range in self.merge_queue:
             tail_page_ids = update_range[self.num_columns+4:]
+            
+            for i in range(len(tail_page_ids)):
+                stale_tail_page_ids.append(tail_page_ids[i])
+
             id_segments = []
             while tail_page_ids != []:
                 id_segment = []
@@ -834,12 +818,6 @@ class Table:
             touched, so we only allocate enought to write metadata.
             """
             for i in range(self.num_columns):
-                """                
-                page = Page(len(self.pages))
-                self.page_index[page.get_id()] = len(self.pages)
-                base_page_ids.append(page.get_id())
-                self.pages.append(page)
-                """
                 page_id = self.page_ids
                 self.page_ids += 1
                 base_page_ids.append(page_id)
@@ -848,10 +826,7 @@ class Table:
             self.process_tail_records(id_segments, base_page_ids,
                     updated_mappings)
 
-        self.modify_page_directory(updated_mappings)
-        # print('outputing merged pages for range: ', sep='')
-        # print(update_range)
-        #self.output_pages(base_page_ids)
+        self.modify_page_directory(updated_mappings, stale_tail_page_ids) 
         self.merging = False
         self.merge_queue = []
         pass

@@ -9,44 +9,34 @@ class Query:
     """
     def __init__(self, table):
         self.table = table
-        self.primary_key = table.key
-        self.indexes = {}
-        self.indexes[self.primary_key] = Index(table)
+        self.key = self.table.key
         self.bp = self.table.bp
-        if self.table.num_records > 0:
-            self.indexes[self.primary_key].create_index(self.primary_key)
 
     """
     Delete a record with specified key.
     """
     def delete(self, key):
-        rid = self.indexes[self.primary_key].locate(key)[0]
+        rid = self.table.index.locate(self.key, key)[0]
         self.table.invalidate_record(rid)
-        for index in self.indexes.values():
-            index.delete(rid, key)
+        for i in self.table.index.indices.keys():
+            self.table.index.delete(rid, i, key)
     """
     Insert a record with specified columns.
     """
     def insert(self, *columns):
         rid = self.table.insert_base_record(*columns)
-        self.indexes[self.primary_key].add_key(rid,self.primary_key, self.bp)
+        self.table.index.add_key(rid, self.key, self.bp)
 
     """
     Read a record with specified key. Will return an empty list if query
     cannot be completed or if no records are found.
     """
-    def select(self, key, column_index, query_columns):
+    def select(self, key, column_number, query_columns):
         if len(query_columns) is not self.table.num_columns:
             print('select error: number of queried columns must match number of columns in table')
             return []
-        try:
-            index = self.indexes[column_index]
-        except KeyError:
-            self.indexes[column_index] = Index(self.table)
-            self.indexes[column_index].create_index(column_index)
-            index = self.indexes[column_index]
 
-        rids = index.locate(key)
+        rids = self.table.index.locate(column_number, key)
         if len(rids) is not 0:
             records = self.table.get_records(rids, query_columns, key)      
             return records
@@ -63,7 +53,7 @@ class Query:
             print(len(columns), end=' columns, even though table has following number of columns: ')
             print(self.table.num_columns)
         try:
-            rid = self.indexes[self.primary_key].locate(key)[0]
+            rid = self.table.index.locate(self.key, key)[0]
         except IndexError:
             print('update error: specified key not found. cannot perform update on non-existent record')
             return
@@ -78,7 +68,7 @@ class Query:
             # from old value:
             if columns[i] != None:
                 try:
-                    self.indexes[i].update_index(rid, columns[i])
+                    self.table.index.update_index(rid, i, columns[i])
                 except KeyError:
                     pass
     """
@@ -87,12 +77,14 @@ class Query:
     """
     def sum(self, start_range, end_range, aggregate_column_index):
         column_sum = 0
+        key = 0
         query_columns = [0]*self.table.num_columns
         query_columns[aggregate_column_index] = 1
-        for key in range(start_range, end_range+1):
-            rids = self.indexes[self.primary_key].locate(key)
-            if len(rids) is not 0:
-                records = self.table.get_records(rids, query_columns, key)
-                for record in records:
-                    column_sum += record.columns[aggregate_column_index]
+        rids = self.table.index.locate_range(start_range, end_range,
+                self.key)
+
+        if len(rids) is not 0:
+            records = self.table.get_records(rids, query_columns, key)
+            for record in records:
+                column_sum += record.columns[aggregate_column_index]
         return column_sum

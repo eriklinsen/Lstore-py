@@ -1,6 +1,6 @@
 from db import Database
 from query import Query
-
+from time import process_time
 from random import choice, randint, sample, seed
 
 db = Database()
@@ -11,6 +11,7 @@ query = Query(grades_table)
 
 records = {}
 seed(3562901)
+time_0 = process_time()
 for i in range(0, 1000):
     key = 92106429 + i
     records[key] = [key, randint(0, 20), randint(0, 20), randint(0, 20), randint(0, 20)]
@@ -62,5 +63,7 @@ for i in range(0, 100):
     # else:
     #     print('sum on [', keys[r[0]], ',', keys[r[1]], ']: ', column_sum)
 print("Aggregate finished")
+time_1 = process_time()
+print('total time: \t\t\t', time_1 - time_0)
 
 db.close()

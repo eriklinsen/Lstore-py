@@ -1,6 +1,6 @@
 from page import Page
 import threading
-import sys
+import os
 
 class BufferPool:
     
@@ -87,6 +87,8 @@ class BufferPool:
         return location
 
     def evict(self):
+        location = None
+        o = self.eviction_queue[:]
         for e in self.eviction_queue:
             page = self.pages[self.table_index[e[0]][e[1]]]
             if page.pinned == 0:
@@ -95,7 +97,19 @@ class BufferPool:
                     self.write_page(page, e[1], e[0])
                 del self.table_index[e[0]][e[1]]
                 location = self.pages.index(page)
-                return location
+                break
+            else:
+                continue
+        if location == None:
+            print('get pinned for eq:')
+            for e in self.eviction_queue:
+                page = self.pages[self.table_index[e[0]][e[1]]]
+                print(page.pinned)
+            print('get pinned for all pages:')
+            for page in self.pages:
+                print(page.pinned)
+            os._exit(1)
+        return location
 
     def write_page(self, page, page_id, table_name):
         path = table_name+'/page_file'

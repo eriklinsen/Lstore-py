@@ -28,7 +28,7 @@ class Database():
         self.table_data = []
         self.table_map = {}
         self.rid_space = RIDspace()
-        self.bp = BufferPool(1000)
+        self.bp = BufferPool(150)
         self.root_path = None
 
     """
