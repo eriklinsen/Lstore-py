@@ -1,5 +1,4 @@
 # MEDB
-Erik Linsenmayer, Nicholas Phomsopha, Tanner Eckmann, Trevor Hansen, Abdullah Mardini
 ## Milestone 1
 Supports update, select, delete, and sum.
 

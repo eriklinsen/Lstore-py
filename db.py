@@ -28,7 +28,7 @@ class Database():
         self.table_data = []
         self.table_map = {}
         self.rid_space = RIDspace()
-        self.bp = BufferPool(150)
+        self.bp = BufferPool(600)
         self.root_path = None
 
     """
@@ -92,6 +92,13 @@ class Database():
     :param key: int             #Index of table key in columns
     """
     def create_table(self, name, num_columns, key):
+        if name in self.table_map:
+            print('create table error: a table has already been created with'\
+            ' the name: ', name, '\nIf you would like to work on a pre-existing table, use'\
+            ' get_table().\nOtherwise, use a different name or drop the'\
+            ' currently existing table')
+            return
+
         table = Table(name, num_columns, key, self.rid_space, self.bp)
         self.tables.append(table)
         self.table_data.append((name, num_columns, key))

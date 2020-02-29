@@ -1,5 +1,6 @@
 from page import Page
 import threading
+import collections
 import os
 
 class BufferPool:
@@ -8,36 +9,30 @@ class BufferPool:
         self.limit = size
         self.pages = []
         self.table_index = {}
-        self.eviction_queue = []
+        self.eviction_queue = collections.OrderedDict()
         self.buffer_lock = threading.Lock()
 
     def get_page(self, table_name, page_id):
         self.buffer_lock.acquire()
-        try:
+        if table_name in self.table_index:
             sub_directory = self.table_index[table_name]
-        except KeyError:
+        else:
             self.table_index[table_name] = {}
             sub_directory = self.table_index[table_name]
 
-        try:
+        if page_id in sub_directory:
             location = sub_directory[page_id]
-            try:
-                i = self.eviction_queue.index((table_name, page_id))
-                self.eviction_queue.pop(i)
-            except ValueError:
-                pass
-            self.eviction_queue.append((table_name, page_id))
+            if (table_name, page_id) in self.eviction_queue:
+                self.eviction_queue.pop((table_name, page_id))
+            self.eviction_queue[(table_name, page_id)] = None
             self.buffer_lock.release()
             return self.pages[location]
-        except KeyError:
+        else:
             if len(self.pages) < self.limit:
                 location = self.fetch(table_name, page_id, None) 
-                try:
-                    i = self.eviction_queue.index((table_name, page_id))
-                    self.eviction_queue.pop(i)
-                except ValueError:
-                    pass
-                self.eviction_queue.append((table_name, page_id))
+                if (table_name, page_id) in self.eviction_queue:
+                    self.eviction_queue.pop((table_name, page_id))
+                self.eviction_queue[(table_name, page_id)] = None
                 sub_directory[page_id] = location
                 self.buffer_lock.release()
                 return self.pages[location]
@@ -45,32 +40,12 @@ class BufferPool:
                location = self.evict()
                self.fetch(table_name, page_id, location)
                sub_directory[page_id] = location
-               try:
-                   i = self.eviction_queue.index((table_name, page_id))
-                   self.eviction_queue.pop(i)
-               except ValueError:
-                   pass
-               self.eviction_queue.append((table_name, page_id))
+               if (table_name, page_id) in self.eviction_queue:
+                   self.eviction_queue.pop((table_name, page_id))
+               self.eviction_queue[(table_name, page_id)] = None
                self.buffer_lock.release()
                return self.pages[location]
 
-    def allocate(self, table_name, page_id):
-        if len(self.pages) < self.limit:
-            page = Page(page_id)
-            self.pages.append(page)
-            location = self.pages.index(page)
-        else:
-            location = self.evict()
-            page = Page(page_id)
-            self.pages[location] = page
-
-        try:
-            sub_directory = self.table_index[table_name]
-        except KeyError:
-            self.table_index[table_name] = {}
-            sub_directory = self.table_index[table_name]
-        sub_directory[page_id] = location
-         
     def fetch(self, table_name, page_id, location):
         path = table_name+'/page_file'
         f = open(path, mode='rb+')
@@ -88,11 +63,10 @@ class BufferPool:
 
     def evict(self):
         location = None
-        o = self.eviction_queue[:]
         for e in self.eviction_queue:
             page = self.pages[self.table_index[e[0]][e[1]]]
             if page.pinned == 0:
-                self.eviction_queue.pop(self.eviction_queue.index(e))
+                self.eviction_queue.pop(e)
                 if page.dirty:
                     self.write_page(page, e[1], e[0])
                 del self.table_index[e[0]][e[1]]
@@ -101,13 +75,7 @@ class BufferPool:
             else:
                 continue
         if location == None:
-            print('get pinned for eq:')
-            for e in self.eviction_queue:
-                page = self.pages[self.table_index[e[0]][e[1]]]
-                print(page.pinned)
-            print('get pinned for all pages:')
-            for page in self.pages:
-                print(page.pinned)
+            print('fatal buffer pool error: all pages are pinned')
             os._exit(1)
         return location
 

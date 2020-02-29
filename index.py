@@ -12,7 +12,13 @@ class Index:
         self.table = table
         self.primary_key = self.table.key
         self.rid_maps = {}
+        self.init_indices(self.table.num_columns)
         self.create_index(self.primary_key)
+
+
+    def init_indices(self, num_columns):
+        for i in range(num_columns):
+            self.indices[i] = None
 
     """
     Returns the location of all records with the given value

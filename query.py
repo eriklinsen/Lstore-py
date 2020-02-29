@@ -7,7 +7,9 @@ class Query:
     Creates a Query object that can perform different queries on the specified
     table. 
     """
-    def __init__(self, table):
+    def __init__(self, table): 
+        if table == None:
+            raise AttributeError('query init error: cannot query on a non-existent table')
         self.table = table
         self.key = self.table.key
         self.bp = self.table.bp
@@ -19,7 +21,8 @@ class Query:
         rid = self.table.index.locate(self.key, key)[0]
         self.table.invalidate_record(rid)
         for i in self.table.index.indices.keys():
-            self.table.index.delete(rid, i, key)
+            if self.table.index.indices[i] != None:
+                self.table.index.delete(rid, i, key)
     """
     Insert a record with specified columns.
     """
@@ -35,6 +38,9 @@ class Query:
         if len(query_columns) is not self.table.num_columns:
             print('select error: number of queried columns must match number of columns in table')
             return []
+        
+        if self.table.index.indices[column_number] == None:
+            self.table.index.create_index(column_number)
 
         rids = self.table.index.locate(column_number, key)
         if len(rids) is not 0:

@@ -149,9 +149,29 @@ class Table:
         """
         self.merge_queue = []
 
+        """
+        Each page that is created is granted a table-unique numerical ID. Page
+        ID's are assigned sequentially, in the order by which pages are created.
+        Page ID's are assigned by simply giving the page the current value of page_ids.
+        page_ids is then incremented to ensure that the next page is given
+        a unique (sequentially assigned) ID.  
+        """
+
         self.page_ids = 0
+
+        """
+        bp is a reference to the global buffer pool. The buffer pool manages
+        all pages that are currently in use by any table in the database.
+        In order to receive a page, the table simply has to make a request that
+        page from the buffer pool.
+        """
        
         self.bp = buffer_pool
+
+        """
+        index is a reference to an Index object that maintains all indices that
+        have created over the table.
+        """
 
         self.index = Index(self)
 
@@ -354,42 +374,30 @@ class Table:
 # ==================== RECORD RETRIEVAL ====================
 
     """
-    Used by select function in Query class.
-    Get all records corresponding to the record ids in rids and pull out the
-    column data coressponding to values in query_columns. So if rids = [1] and
-    query_columns = [1,0,0,1] we pull the column data contained in columns
-    0 and 3 for record 1.
-    To obtain a page we do:
-    rid -> (page_directory) -> page_id and offset -> (page_index) -> page
-    Will return a list of record objects containing key and requested column
-    data.
+
     """
 
-    def get_most_recent_update(self, rid, indirection_pointer, query_columns,
+    def _get_most_recent_update(self, rid, indirection_pointer, query_columns,
             tps, key):
         rid_tuple = self.page_directory[rid]
-        schema_encoding_id = rid_tuple[1]
-        # schema_encoding_col = self.pages[self.page_index[schema_encoding_id]]
+        schema_encoding_id = rid_tuple[1] 
         schema_encoding_col = self.bp.get_page(self.name, schema_encoding_id)
         base_schema = schema_encoding_col.read_schema(self.num_columns,
                 rid_tuple[2])
         tail_encodings = '0'*self.num_columns
         columns = [0]*self.num_columns
         for idx in range(len(base_schema)):
-            page_id = rid_tuple[0] + idx
-            # page = self.pages[self.page_index[page_id]]
+            page_id = rid_tuple[0] + idx 
             page = self.bp.get_page(self.name, page_id)
             columns[idx] = page.read(rid_tuple[2])
         while indirection_pointer != 0:
             tail_tuple = self.page_directory[indirection_pointer]
-            tail_schema_id = tail_tuple[1] - 1
-            # tail_schema_col = self.pages[self.page_index[tail_schema_id]]
+            tail_schema_id = tail_tuple[1] - 1 
             tail_schema_col = self.bp.get_page(self.name, tail_schema_id)
             tail_schema = tail_schema_col.read_schema(self.num_columns,
                     tail_tuple[2])
             for idx in range(len(tail_schema)):
-                if tail_schema[idx] == '1' and tail_encodings[idx] == '0':
-                    # page = self.pages[self.page_index[tail_tuple[0] + idx]]
+                if tail_schema[idx] == '1' and tail_encodings[idx] == '0': 
                     page = self.bp.get_page(self.name, tail_tuple[0] + idx)
                     columns[idx] = page.read(tail_tuple[2])
                     tail_encodings = list(tail_encodings)
@@ -397,13 +405,24 @@ class Table:
                     tail_encodings = ''.join(tail_encodings)
             if int(tail_encodings,2) & int(base_schema,2) == int(base_schema,2):
                 break
-            indir_id = tail_tuple[0] + self.num_columns
-            # indir_col = self.pages[self.page_index[indir_id]]
+            indir_id = tail_tuple[0] + self.num_columns 
             indir_col = self.bp.get_page(self.name, indir_id)
             indirection_pointer = indir_col.read(tail_tuple[2])
             #if indirection_pointer == tps and tps !=0:
              #   break
         return columns
+
+    """
+    get_records obtains all records corresponding to the record ids in rids and
+    pull out the column data coressponding to values in query_columns. So if
+    rids = [1] and query_columns = [1,0,0,1] we pull the column data contained
+    in columns 0 and 3 for record 1. To obtain a page we do:
+    
+    rid -> (page_directory) -> page_id and offset -> buffer pool request -> page
+    
+    Will return a list of record objects containing key and requested column
+    data.
+    """
 
     def get_records(self, rids, query_columns, key):
         records = []
@@ -411,11 +430,11 @@ class Table:
         for rid in rids:
             rid_tuple = self.page_directory[rid]
             first_page_id = rid_tuple[0]
-            # first_page = self.pages[self.page_index[first_page_id]]
+            
             first_page = self.bp.get_page(self.name, first_page_id)
             tps = first_page.read(0)
             indir_id = rid_tuple[1] - 3
-            # indir_col = self.pages[self.page_index[indir_id]]
+            
             indir_col = self.bp.get_page(self.name, indir_id)
             indirection_pointer = indir_col.read(rid_tuple[2])
             columns = []
@@ -423,14 +442,14 @@ class Table:
                 for idx in range(len(query_columns)):
                     if query_columns[idx] is 1:
                         page_id = rid_tuple[0] + idx
-                        # page = self.pages[self.page_index[page_id]]
+                        
                         page = self.bp.get_page(self.name, page_id)
                         column_val = page.read(rid_tuple[2])
                         columns.append(column_val)
                     else:
                         columns.append(None)
             else:
-                updated_record_columns = self.get_most_recent_update(rid,
+                updated_record_columns = self._get_most_recent_update(rid,
                         indirection_pointer, query_columns, tps, key)
                 key = updated_record_columns[self.key]
                 for idx in range(len(query_columns)):
@@ -445,16 +464,16 @@ class Table:
         return records
 
     """
-    Get complete record with metadata included. Used for testing purposes.
+    Get complete base record with metadata included. Used for testing purposes.
     """
-    def get_full_record(self, rids, key):
+    def _get_full_record(self, rids, key):
         records = []
         for rid in rids:
             rid_tuple = self.page_directory[rid]
             columns = []
             for i in range(self.num_columns):
                 page_id = rid_tuple[0] + i
-                # page = self.pages[self.page_index[page_id]]
+               
                 page = self.bp.get_page(self.name, page_id)
                 column_val = page.read(rid_tuple[2])
                 columns.append(column_val)
@@ -464,7 +483,7 @@ class Table:
             """
             for i in range(4):
                 page_id = rid_tuple[1] - i
-                # page = self.pages[self.page_index[page_id]]
+                
                 page = self.bp.get_page(self.name, page_id)
                 if i != SCHEMA_ENCODING_COLUMN:
                     column_val = page.read(rid_tuple[2])
@@ -491,20 +510,15 @@ class Table:
         If 'current' base pages is full, or if no records have been inserted,
         then create new page range containing a fresh set of base pages and
         insert record data into these base pages.
+
+        Otherwise, insert the new base record into the most recently allocated
+        set of base pages.
         """
         if self.current_base_page_is_full() or self.num_records is 0:
             self.record_offset = 2
             page_range = []
             # data storage is column-oriented:
             for column in columns:
-                """
-                page = Page(len(self.pages))
-                page.write(column)
-                # create page_index entry
-                self.page_index[page.get_id()] = len(self.pages)
-                self.pages.append(page)
-                page_range.append(page.get_id())
-                """
                 page_id = self.page_ids
                 self.page_ids += 1
                 page = self.bp.get_page(self.name, page_id)
@@ -523,14 +537,14 @@ class Table:
             self.directory_lock.release()
             # return rid of newly inserted record
             return rid
+
         else:
             range_idx = 0
             page_range = self.page_ranges[-1]
             for column in columns:
                 # pull out page id from current page range
                 page_id = self.page_ranges[-1][range_idx]
-                # get page corresponding to this id
-                # page = self.pages[self.page_index[page_id]]
+                # get page corresponding to this id 
                 page = self.bp.get_page(self.name, page_id)
                 # write data to page
                 page.write(column)
@@ -551,14 +565,14 @@ class Table:
     Inserts a single tail record into tail page (i.e. set of physical tail
     pages).
     """
-    def insert_tail_record(self, tail_page_range, column_update, indir_rid, base_rid):
+    def _insert_tail_record(self, tail_page_range, column_update, indir_rid, base_rid):
         rid_tuple = self.page_directory[base_rid]
         schema_encoding = ['0']*self.num_columns
         tail_record_offset = 0
         # write tail record data
         for i in range(self.num_columns):
             page_id = tail_page_range[i]
-            # page = self.pages[self.page_index[page_id]]
+            
             page = self.bp.get_page(self.name, page_id)
             update_value = column_update[i]
             tail_record_offset = 512 - page.get_capacity()
@@ -577,7 +591,7 @@ class Table:
         # write tail record metadata
         for k in range(5):
             page_id = tail_page_range[self.num_columns:][k]
-            # page = self.pages[self.page_index[page_id]]
+            
             page = self.bp.get_page(self.name, page_id)
             if k != 3:
                 page.write(metadata[k])
@@ -587,14 +601,12 @@ class Table:
         # update indirection column of base record
         # get page containing indirection pointers and update
         indir_page_id = rid_tuple[1] - 3
-        # page = self.pages[self.page_index[indir_page_id]]
         page = self.bp.get_page(self.name, indir_page_id)
         offset = rid_tuple[2]
         page.update(tail_rid, offset)
         # update schema encoding column of base record
         # get page containing schema encodings and update
-        schema_page_id = indir_page_id + 3
-        # page = self.pages[self.page_index[schema_page_id]]
+        schema_page_id = indir_page_id + 3 
         page = self.bp.get_page(self.name, schema_page_id)
         base_schema = page.read_schema(self.num_columns,offset) 
         base_schema = bin(int(base_schema,2) | int(schema_encoding,2))
@@ -603,13 +615,14 @@ class Table:
         # tail_rid -> (id0,idn,offset,page_range)
         self.page_directory[tail_rid] = (tail_page_range[0],tail_page_range[-1],
                 tail_record_offset, rid_tuple[3])
+
     """
     Updates a record. This is achieved by simply creating a tail record that
     represents the update, and inserting this tail record into the set of tail 
     pages that belong to the same page range as the base record that's getting
     updated.
     For instance, suppose we have a two column table with one record, R1, and
-    suppose this 0th and 1st columns of this record have values 2 and
+    suppose the 0th and 1st columns of this record have values 2 and
     4 respectively. Initially, this record will look like:
     RID:    COL0:   COL1:  SCHEMA:  TIMESTAMP:  INDIRECTION:
     R1      2       4      00       time1       0
@@ -627,9 +640,8 @@ class Table:
     If the base record is contained in the page range located at
     page_ranges[1], then the tail record will be written to the tail pages
     located at page_ranges[1]. Of course, if page_ranges[1] has only base
-    pages, then a set of tail pages will be allocated, and their id's will be
-    placed in page_ranges[1].
-    
+    pages, then a set of tail pages will be allocated, and the id's of these
+    pages will beplaced in page_ranges[1].
     """
     def update_record(self, rid, column_update):
         self.directory_lock.acquire()
@@ -640,17 +652,15 @@ class Table:
         
         if self.need_tail_page_allocation(page_range):
             self.allocate_tail_pages(page_range)
-
-        # indir_page = self.pages[self.page_index[rid_tuple[1]-3]]
+        
         indir_page = self.bp.get_page(self.name, rid_tuple[1]-3)
         indirection_pointer = indir_page.read(rid_tuple[2])
         tail_page_range = page_range[-(self.num_columns + 5):]
-        self.insert_tail_record(tail_page_range, column_update,
+        self._insert_tail_record(tail_page_range, column_update,
                 indirection_pointer, rid)
 
         if self.base_page_is_full(page_range) and self.tail_page_is_full(page_range) and not self.merging:
             self.load_merge_queue(page_range, old_range)
-
         
         self.directory_lock.release()
         
@@ -670,21 +680,21 @@ class Table:
             print('error: cannot delete nonexistent record')
             return
 
+        # obtain metadata page containing record's rid
         rid_page_id = rid_tuple[1] - RID_COLUMN
-        # rid_page = self.pages[self.page_index[rid_page_id]]
         rid_page = page = self.bp.get_page(self.name, rid_page_id)
         # invalidate base record:
         rid_page.update(0,rid_tuple[2])
-        # obtain indirection pointer to perform tail record invalidation
-        # indir_page = self.pages[self.page_index[rid_tuple[1]-3]]
-        indir_page = page = self.bp.get_page(self.name, rid_tuple[1]-3)
+        # obtain indirection pointer to perform tail record invalidation 
+        indir_page = self.bp.get_page(self.name, rid_tuple[1]-3)
         indirection_pointer = indir_page.read(rid_tuple[2])
+        # remove the record's entry from the page directory
         del self.page_directory[rid]
         self.directory_lock.release()
     
 # ==================== MERGE ====================
 
-    def get_tail_record(self, id_segment, offset):
+    def _get_tail_record(self, id_segment, offset):
         tail_record_data = []
         for i in range(self.num_columns):
             page_id = id_segment[i]
@@ -702,24 +712,24 @@ class Table:
                 tail_record_data.append(data)
         return tail_record_data
             
-    def process_tail_page(self, id_segment):
+    def _process_tail_page(self, id_segment):
         tail_records = []
         tail_id = id_segment[-1] 
         tail_page = self.bp.get_page(self.name, tail_id)
         offset = tail_page.num_records - 1
         while offset >= 1:
-            tail_records.append(self.get_tail_record(id_segment, offset))
+            tail_records.append(self._get_tail_record(id_segment, offset))
             offset -= 1
         return tail_records
 
-    def write_tps_to_base(self, base_page_ids, tail_records):
+    def _write_tps_to_base(self, base_page_ids, tail_records):
         most_recent_update = tail_records[0]
         tail_id = most_recent_update[-4]
         for page_id in base_page_ids: 
             page = page = self.bp.get_page(self.name, page_id)
             page.update(tail_id, 0)
 
-    def write_updates_to_base_pages(self, tail_records, base_page_ids, updated_mappings):
+    def _write_updates_to_base_pages(self, tail_records, base_page_ids, updated_mappings):
         tail_encodings_map = {}
         for tail_record in tail_records:
             tail_schema  = tail_record[-2]
@@ -754,19 +764,19 @@ class Table:
                     updated_mappings[base_rid] = (base_page_ids, base_tuple[3])
 
                         
-    def process_tail_records(self, id_segments, base_page_ids, updated_mappings):
+    def _process_tail_records(self, id_segments, base_page_ids, updated_mappings):
         tps_updated = False
         while id_segments != []:
             latest_segment = id_segments[-1]
-            tail_records = self.process_tail_page(latest_segment)
+            tail_records = self._process_tail_page(latest_segment)
             if not tps_updated:
-                self.write_tps_to_base(base_page_ids, tail_records)
+                self._write_tps_to_base(base_page_ids, tail_records)
                 tps_updated = True
-            self.write_updates_to_base_pages(tail_records, base_page_ids,
+            self._write_updates_to_base_pages(tail_records, base_page_ids,
                     updated_mappings)
             id_segments.pop(-1)
 
-    def copy_base_pages(self, base_page_ids, update_range):
+    def _copy_base_pages(self, base_page_ids, update_range):
         for i in range(len(base_page_ids)):
             new_page_id = base_page_ids[i]
             old_page_id = update_range[i]  
@@ -776,7 +786,7 @@ class Table:
                 old_data = old_page.read(k)
                 new_page.update(old_data,k)
     
-    def modify_page_directory(self, updated_mappings, stale_page_ids):
+    def _modify_page_directory(self, updated_mappings, stale_page_ids):
         self.directory_lock.acquire()
         stale_page_ids = set(stale_page_ids)
         for rid in updated_mappings.keys():
@@ -822,11 +832,11 @@ class Table:
                 self.page_ids += 1
                 base_page_ids.append(page_id)
 
-            self.copy_base_pages(base_page_ids, update_range)
-            self.process_tail_records(id_segments, base_page_ids,
+            self._copy_base_pages(base_page_ids, update_range)
+            self._process_tail_records(id_segments, base_page_ids,
                     updated_mappings)
 
-        self.modify_page_directory(updated_mappings, stale_tail_page_ids) 
+        self._modify_page_directory(updated_mappings, stale_tail_page_ids) 
         self.merging = False
         self.merge_queue = []
         pass
