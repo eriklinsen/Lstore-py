@@ -1,5 +1,6 @@
 from table import Table
 from buffer_pool import BufferPool
+import os
 import pathlib
 import pickle
 
@@ -44,7 +45,7 @@ class Database():
     """
     
     def init_dir(self, root_path):
-        pathlib.Path(root_path+'/').mkdir(parents=True, exist_ok=True)
+        os.makedirs(root_path, 0o777)
         f = open(root_path+'/tables', mode='wb')
         f.close
         f = open(root_path+'/rid_space', mode='wb')
