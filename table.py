@@ -77,7 +77,7 @@ class Table:
         located in the 8th - 15th bytes of the base pages associated with that
         record, then the record offset would be 1. If the column values for
         a record are located in the 16th - 23rd bytes of the base pages
-        associated with that record, the record offset is 2, and so on.   
+        associated with that record, the record offset is 2, and so on.
         """
         self.record_offset = 0
 
@@ -674,43 +674,46 @@ class Table:
             transaction_archive = self.session_log.log[thread_id]
             tail_encodings_map = {}
             # roll back inserts:
-            for inserted_rid in transaction_archive['inserts']:
-                rid_tuple = self.page_directory[inserted_rid]
-                rid_page_id = rid_tuple[1] - RID_COLUMN
-                rid_page = self.bp.get_page(self.name, rid_page_id)
-                rid_page.update(0, rid_tuple[2])
-                del self.page_directory[inserted_rid]
-            for deleted_rid in transaction_archive['deletes']:
-                rid_tuple = self.session_log.dir_log[deleted_rid] 
-                rid_page_id = rid_tuple[1] - RID_COLUMN
-                rid_page = self.bp.get_page(self.name, rid_page_id)
-                rid_page.update(deleted_rid, rid_tuple[2])
-                self.page_directory[deleted_rid] = rid_tuple
-            for update in transaction_archive['updates']:
-                tail_rid = update[0]
-                base_rid = updates[1]
-                next_tail = updates[2]
-                base_indir_id = update[3]
-                base_schema_id = update[4]
-                base_offset = update[5]
-                tail_schema = update[6]
-                # get base schema page:
-                base_schema_page = self.bp.get_page(self.name, base_schema_id)
-                # get base indirection page:
-                base_indirection_page = self.bp.get_page(self.name, base_indir_id)
-                # set base indirection pointer to next tail record in lineage:
-                base_indirection_page.update(next_tail, base_offset) 
-                # revert base schema to previous state, if necessary:
-                if base_rid not in tail_encodings_map:
-                    tail_encodings_map[base_rid] = '0'*self.num_columns
-                tail_encoding = tail_encodings_map[base_rid]
-                if int(tail_encoding,2) | int(tail_schema,2) != int(tail_encoding,2):
-                    format_spec = '0' + str(num_columns) +'b'
-                    base_schema = base_schema_page.read_schema(self.num_columns, base_offset)
-                    base_schema = format(int(base_schema,2)^int(tail_schema,2), format_spec)
-                    tail_encoding = format(int(tail_encoding,2)|int(tail_schema,2), format_spec)
-                    base_schema_page.update_schema(base_schema, base_offset)
-                    tail_encodings_map[base_rid] = tail_encoding
+            if 'inserts' in transaction_archive:
+                for inserted_rid in transaction_archive['inserts']:
+                    rid_tuple = self.page_directory[inserted_rid]
+                    rid_page_id = rid_tuple[1] - RID_COLUMN
+                    rid_page = self.bp.get_page(self.name, rid_page_id)
+                    rid_page.update(0, rid_tuple[2])
+                    del self.page_directory[inserted_rid]
+            if 'deletes' in transaction_archive:
+                for deleted_rid in transaction_archive['deletes']:
+                    rid_tuple = self.session_log.dir_log[deleted_rid] 
+                    rid_page_id = rid_tuple[1] - RID_COLUMN
+                    rid_page = self.bp.get_page(self.name, rid_page_id)
+                    rid_page.update(deleted_rid, rid_tuple[2])
+                    self.page_directory[deleted_rid] = rid_tuple
+            if 'updates' in transaction_archive:
+                for update in transaction_archive['updates']:
+                    tail_rid = update[0]
+                    base_rid = update[1]
+                    next_tail = update[2]
+                    base_indir_id = update[3]
+                    base_schema_id = update[4]
+                    base_offset = update[5]
+                    tail_schema = update[6]
+                    # get base schema page:
+                    base_schema_page = self.bp.get_page(self.name, base_schema_id)
+                    # get base indirection page:
+                    base_indirection_page = self.bp.get_page(self.name, base_indir_id)
+                    # set base indirection pointer to next tail record in lineage:
+                    base_indirection_page.update(next_tail, base_offset)
+                    # revert base schema to previous state, if necessary:
+                    if base_rid not in tail_encodings_map:
+                        tail_encodings_map[base_rid] = '0'*self.num_columns
+                    tail_encoding = tail_encodings_map[base_rid]
+                    if int(tail_encoding,2) | int(tail_schema,2) != int(tail_encoding,2):
+                        format_spec = '0' + str(self.num_columns) +'b'
+                        base_schema = base_schema_page.read_schema(self.num_columns, base_offset)
+                        base_schema = format(int(base_schema,2)^int(tail_schema,2), format_spec)
+                        tail_encoding = format(int(tail_encoding,2)|int(tail_schema,2), format_spec)
+                        base_schema_page.update_schema(base_schema, base_offset)
+                        tail_encodings_map[base_rid] = tail_encoding
         self.index.rollback_index(thread_id)
         self.directory_lock.release()
 

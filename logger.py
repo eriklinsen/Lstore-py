@@ -33,7 +33,7 @@ class Logger():
         """
         Record the delete. This is done by recording the rid of the deleted
         record. The page directory entry for the record is also recorded in the
-        directory log (dir_log), so that the entry can be restored in th event
+        directory log (dir_log), so that the entry can be restored in the event
         of a rollback.
         """
         self.log[thread_id]['deletes'].append(rid)
