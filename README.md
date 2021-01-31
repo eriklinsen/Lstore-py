@@ -1,12 +1,12 @@
 # Lstore-py
 _PLEASE BE ADVISED: While Lstore-py is certainly functional, the current codebase is in an undesirable state. Presently,
 the codebase does not meet my standards for conciseness or readability. I'm currently in the process of updating and
-refactoring the code you find here._
+refactoring the code you find here (as of 1/30/2020)._
 ## Milestone 1
 Implemented support update, select, delete, and aggregate queries.
 
 Implemented a hash-table based index over the key column specified when creating the table. There is currently no
-support for creating multiple indexes over multiple columns. For this milestone, only one index is maintained at a
+support for creating multiple indices over multiple columns. For this milestone, only one index is maintained at a
 time. The index can, however, be indexed over a column with duplicate values (i.e. not all key values have to be
 unique).
 
